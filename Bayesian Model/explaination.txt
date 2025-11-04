@@ -1,0 +1,123 @@
+Project Overview — Bayesian Intent Estimation
+
+This project builds a Bayesian Network (BN) that predicts purchase intent using user-session features such as traffic source, device type, search behavior, and checkout activity.
+The code trains the BN, evaluates its performance, and exports the Conditional Probability Tables (CPTs) and validation predictions for interpretability analysis.
+
+🔹 What the Script Does
+
+Loads the data
+
+If you provide a CSV path (--data), it loads your dataset.
+
+If no file is given, it automatically creates a synthetic sample dataset so the script can run end-to-end out of the box.
+
+Prepares the data
+
+Bayesian Networks need discrete (categorical) values.
+
+Integers and booleans are converted to string labels ("0", "1").
+
+Continuous values (floats) are divided into 4 quantile bins.
+
+This step is just for demonstration — you can replace it with your own preprocessing.
+
+Defines the network structure
+
+The DAG follows a simple purchase funnel:
+
+traffic_source → used_search → applied_filters → added_to_cart → reached_checkout → intent
+
+
+Some variables (like device, prior_purchaser, viewed_shipping) directly connect to intent.
+
+Any remaining features are linked to intent so they still contribute.
+
+Trains the Bayesian Network
+
+CPTs are learned using pgmpy’s BayesianEstimator with a small BDeu prior for smoothing.
+
+Training produces conditional probability tables for each node.
+
+Evaluates the model
+
+Splits data into train/validation (80/20).
+
+Calculates probabilities P(intent=1) on the validation set.
+
+Reports:
+
+AUROC
+
+Average Precision (AUPR)
+
+Brier score
+
+Exports results
+
+val_predictions.csv → predicted probabilities and true labels
+
+intent_cpt_wide.csv → matrix view of CPT (rows = intent states, columns = parent combinations)
+
+intent_cpt_long.csv → tidy view (one row per parent-state combo, with probability)
+
+🔹 What the Notebook Adds
+
+Once the CPTs are exported, the analysis notebook computes:
+
+Mutual Information (MI) — measures how much each feature reduces uncertainty about intent.
+
+Sensitivity Analysis — shows how changing a single feature state (e.g., added_to_cart = 1) affects P(intent=1).
+
+Marginal Effects — the average change in predicted intent when toggling each feature.
+
+Calibration metrics — AUROC, AUPR, Brier score, and a reliability curve plot.
+
+Network structure view — lists or visualizes which variables directly influence intent.
+
+🔹 Why This Approach
+
+Transparent — CPTs show exactly how features affect intent.
+
+Uncertainty-aware — outputs full probability distributions, not just point predictions.
+
+Counterfactual-ready — easy to ask “what if” questions using the BN.
+
+Fast inference — efficient enough for real-time scoring in production systems.
+
+🔹 How to Run
+# Install dependencies
+pip install --upgrade pip setuptools wheel
+pip install pandas numpy scikit-learn pgmpy==0.1.24 matplotlib
+
+# Run training on your dataset
+python bayesian_intent_estimator.py --data /path/to/sessions.csv --outdir ./bn_out
+
+# Or try the built-in demo
+python bayesian_intent_estimator.py --outdir ./bn_out
+
+
+Then open the analysis notebook to visualize:
+
+Mutual Information (feature importance)
+
+Sensitivity plots
+
+Marginal effects
+
+Calibration (reliability curve)
+
+Network structure diagram
+
+🔹 In Summary
+
+This workflow:
+
+Trains a Bayesian model to predict purchase intent.
+
+Evaluates its accuracy and calibration.
+
+Exports interpretable probability tables.
+
+Analyzes feature impact and dependencies in the notebook.
+
+It’s a clear, end-to-end example of using Bayesian Networks for interpretable intent recognition — ready to run, understand, and extend.
