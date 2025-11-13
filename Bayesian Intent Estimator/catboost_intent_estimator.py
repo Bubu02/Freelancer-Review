@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.metrics import accuracy_score
 
 n = 2500
 random_ng = np.random.default_rng(42)
@@ -23,7 +24,6 @@ intent = (random_ng.random(n) < np.clip(base, 0, 0.95)).astype(int)
 demo_data = pd.DataFrame(
         {
             "traffic_source": traffic_source,
-            "search_use": search_use,
             "device": device,
             "purchase_history": purchase_history,
             "filtering_actions": filtering_actions,
@@ -35,12 +35,23 @@ demo_data = pd.DataFrame(
 
 demo_data.head(5)
 
+from sklearn.preprocessing import LabelEncoder
+
+cat_cols = ['traffic_source', 'device']
+
+# Label encodding
+labels_encoders = {}
+for col in cat_cols:
+    le = LabelEncoder()
+    demo_data[col] = le.fit_transform(demo_data[col])
+    labels_encoders[col] = le
+
 from sklearn.model_selection import train_test_split
 
 # Features target separation
 features = [
-        "search_use", "filtering_actions",
-        "basket_activity", "checkout_behaviour"
+        "traffic_source", "device", "purchase_history", "filtering_actions",
+        "basket_activity", "checkout_behaviour", "shipping_research"
     ]
 target = "intent"
 
@@ -49,46 +60,14 @@ X = demo_data[features].copy()
 y = demo_data[target].astype(int)
 X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.2, random_state=42, stratify=y)
 
-# Combine features and target back into DataFrames
-train_data = X_train.copy()
-train_data['intent'] = y_train
+from catboost import CatBoostClassifier
 
-from pgmpy.models.BayesianNetwork import BayesianNetwork
-from pgmpy.estimators import BayesianEstimator
 
-model = BayesianNetwork([
-    ('filtering_actions', 'search_use'),
-    ('filtering_actions', 'basket_activity'),
-    ('search_use', 'basket_activity'),
-    ('checkout_behaviour', 'basket_activity'),
-    ('intent', 'basket_activity'),
-])
-model.fit(train_data, estimator=BayesianEstimator, prior_type='BDeu', equivalent_sample_size=10)
+model = CatBoostClassifier(iterations=500, learning_rate=0.1, depth=6,
+                           loss_function='MultiClass', random_state=42, verbose=0)
+model.fit(X_train, y_train)
 
-# Print one of the learned CPD
-print(model.cpds[0])
+from sklearn.metrics import accuracy_score
 
-from pgmpy.inference import VariableElimination
-
-inference = VariableElimination(model)
-
-rows = []
-for col in features:
-    # states for this variable
-    states = model.get_cpds(col).state_names[col]
-    for val in states:
-        q = inference.query(variables=["intent"], evidence={col: val}, show_progress=False)
-        intent_states = list(q.state_names["intent"])
-
-        p_high = float(q.values[intent_states.index(1)])
-        p_low  = float(q.values[intent_states.index(0)])
-
-        rows.append({
-            "Attribute": col,
-            "Value": {0: "No", 1: "Yes"}.get(val, val), # yes and no as in the documnt
-            "Intent = High": round(p_high, 2),
-            "Intent = Low": round(p_low, 2),
-        })
-
-cpt_df = pd.DataFrame(rows, columns=["Attribute", "Value", "Intent = High", "Intent = Low"])
-print(cpt_df.to_string(index=False))
+y_pred = model.predict(X_test)
+print(f"Accuracy: {accuracy_score(y_test, y_pred) * 100:.2f}%")
